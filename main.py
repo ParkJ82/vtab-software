@@ -204,7 +204,13 @@ def frame_point_to_absolute(point: Point) -> Point:
     return abs_x, abs_y
 
 
-def draw_debug(frame: np.ndarray, raw_point: Optional[Point], smooth_point: Optional[Point], abs_point: Optional[Point]) -> np.ndarray:
+def draw_debug(
+    frame: np.ndarray,
+    tracking_active: bool,
+    raw_point: Optional[Point],
+    smooth_point: Optional[Point],
+    abs_point: Optional[Point],
+) -> np.ndarray:
     output = frame.copy()
 
     # Draw ROI
@@ -212,45 +218,68 @@ def draw_debug(frame: np.ndarray, raw_point: Optional[Point], smooth_point: Opti
     cv2.rectangle(output, (x1, y1), (x2, y2), (255, 0, 0), 2)
     cv2.putText(output, "ROI", (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 0), 2)
 
-    if raw_point is not None:
+    status = "TRACKING ON" if tracking_active else "TRACKING OFF"
+    color = (0, 255, 0) if tracking_active else (0, 165, 255)
+    cv2.putText(output, status, (20, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.9, color, 2)
+
+    if not tracking_active:
+        cv2.putText(
+            output,
+            "Press SPACE to start pen tracking",
+            (20, 65),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.65,
+            (255, 255, 255),
+            2,
+        )
+        cv2.putText(
+            output,
+            "Pen position is not sent; overlay hidden",
+            (20, 95),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.55,
+            (200, 200, 200),
+            2,
+        )
+    elif raw_point is not None:
         cv2.circle(output, raw_point, 7, (0, 0, 255), -1)
         cv2.putText(
             output,
             f"raw=({raw_point[0]}, {raw_point[1]})",
-            (20, 30),
+            (20, 65),
             cv2.FONT_HERSHEY_SIMPLEX,
             0.7,
             (0, 0, 255),
             2,
         )
 
-    if smooth_point is not None:
+    if tracking_active and smooth_point is not None:
         cv2.circle(output, smooth_point, 8, (0, 255, 0), 2)
         cv2.putText(
             output,
             f"smooth=({smooth_point[0]}, {smooth_point[1]})",
-            (20, 60),
+            (20, 95),
             cv2.FONT_HERSHEY_SIMPLEX,
             0.7,
             (0, 255, 0),
             2,
         )
 
-    if abs_point is not None:
+    if tracking_active and abs_point is not None:
         cv2.putText(
             output,
             f"absolute=({abs_point[0]}, {abs_point[1]})",
-            (20, 90),
+            (20, 125),
             cv2.FONT_HERSHEY_SIMPLEX,
             0.7,
             (255, 255, 255),
             2,
         )
-    else:
+    elif tracking_active:
         cv2.putText(
             output,
             "TIP NOT DETECTED",
-            (20, 95),
+            (20, 125),
             cv2.FONT_HERSHEY_SIMPLEX,
             0.9,
             (0, 0, 255),
@@ -259,10 +288,10 @@ def draw_debug(frame: np.ndarray, raw_point: Optional[Point], smooth_point: Opti
 
     cv2.putText(
         output,
-        "Press q to quit",
+        "Space: toggle tracking | q: quit",
         (20, output.shape[0] - 20),
         cv2.FONT_HERSHEY_SIMPLEX,
-        0.7,
+        0.65,
         (255, 255, 255),
         2,
     )
@@ -289,6 +318,7 @@ def main() -> None:
     driver = DriverClient(config.DRIVER_HOST, config.DRIVER_PORT)
     driver.connect()
 
+    tracking_active = False
     smoothed_point: Optional[Point] = None
     previous_raw_tip: Optional[Point] = None
     previous_previous_raw_tip: Optional[Point] = None
@@ -300,37 +330,55 @@ def main() -> None:
                 print("Failed to read frame from camera.")
                 break
 
-            raw_point, mask = detect_pen_tip(frame, previous_raw_tip, previous_previous_raw_tip)
-
+            raw_point: Optional[Point] = None
             abs_point: Optional[Point] = None
+            x1, y1, x2, y2 = config.ROI
+            mask_h, mask_w = y2 - y1, x2 - x1
+            mask = np.zeros((mask_h, mask_w), dtype=np.uint8)
 
-            if raw_point is not None:
-                previous_previous_raw_tip = previous_raw_tip
-                previous_raw_tip = raw_point
-                smoothed_point = apply_ema(smoothed_point, raw_point, config.SMOOTHING_ALPHA)
-                abs_point = frame_point_to_absolute(smoothed_point)
+            if tracking_active:
+                raw_point, mask = detect_pen_tip(frame, previous_raw_tip, previous_previous_raw_tip)
 
-                # Send immediately to driver
-                driver.send_coordinates(abs_point[0], abs_point[1])
-            else:
-                # Optional behavior:
-                # keep previous smooth point, or clear it
-                smoothed_point = None
-                previous_raw_tip = None
-                previous_previous_raw_tip = None
+                if raw_point is not None:
+                    previous_previous_raw_tip = previous_raw_tip
+                    previous_raw_tip = raw_point
+                    smoothed_point = apply_ema(smoothed_point, raw_point, config.SMOOTHING_ALPHA)
+                    abs_point = frame_point_to_absolute(smoothed_point)
+                    driver.send_coordinates(abs_point[0], abs_point[1])
+                else:
+                    smoothed_point = None
+                    previous_raw_tip = None
+                    previous_previous_raw_tip = None
 
             if config.SHOW_DEBUG:
-                debug_frame = draw_debug(frame, raw_point, smoothed_point, abs_point)
+                debug_frame = draw_debug(frame, tracking_active, raw_point, smoothed_point, abs_point)
                 cv2.imshow("Pen Tip Detection", debug_frame)
 
             if config.SHOW_MASK:
                 cv2.imshow("Mask", mask)
 
             key = cv2.waitKey(1) & 0xFF
-            if key == ord("q"):
+            if key == ord(" "):
+                tracking_active = not tracking_active
+                if tracking_active:
+                    driver.send_tracking_start()
+                    smoothed_point = None
+                    previous_raw_tip = None
+                    previous_previous_raw_tip = None
+                else:
+                    driver.send_tracking_stop()
+                    smoothed_point = None
+                    previous_raw_tip = None
+                    previous_previous_raw_tip = None
+            elif key == ord("q"):
                 break
 
     finally:
+        if tracking_active:
+            try:
+                driver.send_tracking_stop()
+            except OSError:
+                pass
         cap.release()
         driver.close()
         cv2.destroyAllWindows()

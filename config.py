@@ -38,6 +38,10 @@ ABSOLUTE_MAX = 32767
 DRIVER_HOST = "127.0.0.1"
 DRIVER_PORT = 9999
 
-# Debug windows
+# Debug windows (when tracking is off, pen overlays are hidden but camera preview can stay)
 SHOW_MASK = True
 SHOW_DEBUG = True
+
+# Device canvas (test_server maps 0..32767 pen coords to this size)
+DEVICE_CANVAS_WIDTH = 640
+DEVICE_CANVAS_HEIGHT = 480
