@@ -6,6 +6,7 @@ from typing import Optional, Tuple
 
 import config
 from driver_client import DriverClient
+from gyro_reader import GyroReader
 
 
 Point = Tuple[int, int]
@@ -115,7 +116,7 @@ def detect_pen_tip(
 
     best_contour = cv2.convexHull(merged_pts.astype(np.int32))
 
-    # If the selected blob is roughly round (typical green tip marker),
+    # If the selected blob is roughly round (typical blue tip marker),
     # use centroid directly; endpoint logic is better for elongated pen-body blobs.
     marker_rect = cv2.minAreaRect(best_contour)
     mw, mh = marker_rect[1]
@@ -210,6 +211,7 @@ def draw_debug(
     raw_point: Optional[Point],
     smooth_point: Optional[Point],
     abs_point: Optional[Point],
+    gyro_sample: Optional[Tuple[float, float, float]] = None,
 ) -> np.ndarray:
     output = frame.copy()
 
@@ -234,7 +236,7 @@ def draw_debug(
         )
         cv2.putText(
             output,
-            "Pen position is not sent; overlay hidden",
+            "Pen + gyro not sent; camera overlay hidden",
             (20, 95),
             cv2.FONT_HERSHEY_SIMPLEX,
             0.55,
@@ -286,6 +288,28 @@ def draw_debug(
             3,
         )
 
+    if tracking_active and gyro_sample is not None:
+        gx, gy, gz = gyro_sample
+        cv2.putText(
+            output,
+            f"gyro (rad/s): ({gx:.4f}, {gy:.4f}, {gz:.4f})",
+            (20, 155),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.55,
+            (200, 200, 255),
+            2,
+        )
+    elif tracking_active and config.GYRO_MODE == "none":
+        cv2.putText(
+            output,
+            "Gyro: not used (GYRO_MODE=none)",
+            (20, 155),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.5,
+            (140, 140, 140),
+            2,
+        )
+
     cv2.putText(
         output,
         "Space: toggle tracking | q: quit",
@@ -318,6 +342,7 @@ def main() -> None:
     driver = DriverClient(config.DRIVER_HOST, config.DRIVER_PORT)
     driver.connect()
 
+    gyro = GyroReader()
     tracking_active = False
     smoothed_point: Optional[Point] = None
     previous_raw_tip: Optional[Point] = None
@@ -350,8 +375,14 @@ def main() -> None:
                     previous_raw_tip = None
                     previous_previous_raw_tip = None
 
+            gyro_sample: Optional[Tuple[float, float, float]] = None
+            if tracking_active:
+                gyro_sample = gyro.read()
+
             if config.SHOW_DEBUG:
-                debug_frame = draw_debug(frame, tracking_active, raw_point, smoothed_point, abs_point)
+                debug_frame = draw_debug(
+                    frame, tracking_active, raw_point, smoothed_point, abs_point, gyro_sample
+                )
                 cv2.imshow("Pen Tip Detection", debug_frame)
 
             if config.SHOW_MASK:
@@ -365,11 +396,13 @@ def main() -> None:
                     smoothed_point = None
                     previous_raw_tip = None
                     previous_previous_raw_tip = None
+                    gyro.start()
                 else:
                     driver.send_tracking_stop()
                     smoothed_point = None
                     previous_raw_tip = None
                     previous_previous_raw_tip = None
+                    gyro.stop()
             elif key == ord("q"):
                 break
 
@@ -380,6 +413,7 @@ def main() -> None:
             except OSError:
                 pass
         cap.release()
+        gyro.stop()
         driver.close()
         cv2.destroyAllWindows()
 

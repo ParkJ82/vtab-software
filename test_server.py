@@ -44,9 +44,10 @@ def main() -> None:
     conn, addr = server.accept()
     print(f"Connected by {addr}")
 
-    canvas = np.ones((ch, cw, 3), dtype=np.uint8) * 255
+    canvas = np.zeros((ch, cw, 3), dtype=np.uint8)
+    canvas[:] = config.DEVICE_CANVAS_BG_BGR
     last_pt: Optional[Tuple[int, int]] = None
-    line_color = (40, 120, 255)
+    line_color = config.DEVICE_STROKE_BGR
 
     try:
         while True:
@@ -58,7 +59,8 @@ def main() -> None:
             cmd, x, y = struct.unpack("!BHH", data)
 
             if cmd == CMD_TRACKING_START:
-                canvas = np.ones((ch, cw, 3), dtype=np.uint8) * 255
+                canvas = np.zeros((ch, cw, 3), dtype=np.uint8)
+                canvas[:] = config.DEVICE_CANVAS_BG_BGR
                 last_pt = None
             elif cmd == CMD_TRACKING_STOP:
                 last_pt = None

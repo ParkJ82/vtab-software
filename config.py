@@ -5,10 +5,10 @@ CAMERA_INDEX = 1
 FRAME_WIDTH = 1280
 FRAME_HEIGHT = 720
 
-# Green tip tracking profile.
-# Use a bright/neon green marker on the pen tip and tune for your lighting.
-LOWER_HSV = (35, 70, 70)
-UPPER_HSV = (95, 255, 255)
+# Blue tip on a brown surface (desk/paper), white pen body.
+# Tune LOWER_HSV / UPPER_HSV for your lighting; blue in OpenCV H is ~90–125 (0–179 scale).
+LOWER_HSV = (95, 90, 70)
+UPPER_HSV = (125, 255, 255)
 
 # Minimum contour area to count as a valid pen tip blob.
 MIN_CONTOUR_AREA = 80
@@ -45,3 +45,14 @@ SHOW_DEBUG = True
 # Device canvas (test_server maps 0..32767 pen coords to this size)
 DEVICE_CANVAS_WIDTH = 640
 DEVICE_CANVAS_HEIGHT = 480
+# BGR colors for device window: brown “paper”, white “ink” (matches white pen on brown background)
+DEVICE_CANVAS_BG_BGR = (45, 72, 105)
+DEVICE_STROKE_BGR = (255, 255, 255)
+
+# Gyroscope — started/stopped together with pen tracking (Space). Same button.
+# "none" = no gyro sampling (readings not shown).
+# "mock" = synthetic rates for demo without hardware.
+# "serial" = read text lines "gx gy gz" or "gx,gy,gz" from GYRO_SERIAL_PORT (needs pyserial).
+GYRO_MODE = "mock"
+GYRO_SERIAL_PORT = None
+GYRO_SERIAL_BAUD = 115200
