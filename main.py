@@ -2,6 +2,7 @@
 
 import cv2
 import numpy as np
+import time
 from typing import Optional, Tuple
 
 import config
@@ -347,6 +348,7 @@ def main() -> None:
     smoothed_point: Optional[Point] = None
     previous_raw_tip: Optional[Point] = None
     previous_previous_raw_tip: Optional[Point] = None
+    last_terminal_print_t = 0.0
 
     try:
         while True:
@@ -376,8 +378,30 @@ def main() -> None:
                     previous_previous_raw_tip = None
 
             gyro_sample: Optional[Tuple[float, float, float]] = None
+            imu_sample = None
             if tracking_active:
+                # Pull latest IMU line (if available) and also keep gyro triple for overlay.
+                imu_sample = gyro.read_imu()
                 gyro_sample = gyro.read()
+
+                # Terminal output: pen coordinates + IMU (throttled).
+                now = time.perf_counter()
+                if now - last_terminal_print_t >= 0.1:
+                    last_terminal_print_t = now
+                    if abs_point is None:
+                        tip_s = "tip=NOT_DETECTED"
+                        abs_s = "abs=NA"
+                    else:
+                        tip_s = "tip=OK"
+                        abs_s = f"abs=({abs_point[0]},{abs_point[1]})"
+
+                    if imu_sample is None:
+                        imu_s = "imu=NA"
+                    else:
+                        ax, ay, az, gx, gy, gz = imu_sample
+                        imu_s = f"imu=ax,ay,az,gx,gy,gz=({ax},{ay},{az},{gx},{gy},{gz})"
+
+                    print(f"{abs_s} {tip_s} {imu_s}", flush=True)
 
             if config.SHOW_DEBUG:
                 debug_frame = draw_debug(
