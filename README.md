@@ -1,6 +1,6 @@
 # Pen tip camera → drawing on a “device”
 
-This project tracks a **blue pen tip** (white pen body, brown background in frame) using HSV color segmentation from a webcam (OpenCV + NumPy), maps the tip position into **absolute coordinates** `0…32767`, and sends them over TCP to a second program that **draws** on a **brown canvas with white strokes** (device window).
+This project tracks a **green pen tip** (black pen body, brown background in frame) using HSV color segmentation from a webcam (OpenCV + NumPy), maps the tip position into **absolute coordinates** `0…32767`, and sends them over TCP to a second program that **draws** on a **brown canvas with black strokes** (device window).
 
 The **same Space bar** also starts and stops **gyroscope sampling** (see `gyro_reader.py` and `config.GYRO_MODE`). When tracking is off, **pen overlays and gyro readouts on the computer** stop; the device does not receive pen coordinates until you turn tracking on again.
 
@@ -41,7 +41,7 @@ The **same Space bar** also starts and stops **gyroscope sampling** (see `gyro_r
 The implementation lives in **`main.py`**, function **`detect_pen_tip()`**.
 
 1. **ROI** — Only a rectangle of the frame (`config.ROI`) is processed so the “paper” area matches your setup.
-2. **Color segmentation** — The ROI is converted to HSV; **`cv2.inRange`** keeps pixels in the tuned **blue tip** band (`LOWER_HSV` / `UPPER_HSV` in `config.py`). Adjust if your lighting or blue differs.
+2. **Color segmentation** — The ROI is converted to HSV; **`cv2.inRange`** keeps pixels in the tuned **green tip** band (`LOWER_HSV` / `UPPER_HSV` in `config.py`). Adjust if your lighting or green differs.
 3. **Mask cleanup** — Morphological **open/close** reduces noise.
 4. **Contours** — **`cv2.findContours`** finds blobs; area and aspect ratio filters reject non-pen regions.
 5. **Merge split blobs** — Nearby contours (e.g. partial occlusion) are merged before analysis.
@@ -56,16 +56,16 @@ Mapping to the wire format uses **`frame_point_to_absolute()`**: ROI pixel \((x,
 - Each frame while tracking also calls **`gyro.read()`** when `GYRO_MODE` is not `none` (see `gyro_reader.py`); values are **displayed locally** on the OpenCV window, not sent over the same pen packet (the assignment’s “drawing” is pen position on the device).
 - **`driver_client.py`** sends **5-byte** TCP packets: `struct.pack("!BHH", cmd, x, y)`:
   - **`cmd == 0`** (`CMD_MOVE`) — pen moved to `(x, y)` in `0…32767`.
-  - **`cmd == 2`** (`CMD_TRACKING_START`) — new drawing session (device clears canvas).
+  - **`cmd == 2`** (`CMD_TRACKING_START`) — resume drawing (device does **not** clear; it just lifts the pen).
   - **`cmd == 1`** (`CMD_TRACKING_STOP`) — user stopped tracking; device **lifts the pen** (next move won’t connect with a line from the old point).
 
 Connection settings: **`config.DRIVER_HOST`**, **`config.DRIVER_PORT`**.
 
 ## How the user sees the drawing (device)
 
-**`test_server.py`** accepts the same TCP stream and builds a **brown “paper” canvas** with **white stroke** (`DEVICE_CANVAS_BG_BGR` / `DEVICE_STROKE_BGR`, size `DEVICE_CANVAS_WIDTH` × `DEVICE_CANVAS_HEIGHT` in `config.py`).
+**`test_server.py`** accepts the same TCP stream and builds a **brown “paper” canvas** with **black stroke** (`DEVICE_CANVAS_BG_BGR` / `DEVICE_STROKE_BGR`, size `DEVICE_CANVAS_WIDTH` × `DEVICE_CANVAS_HEIGHT` in `config.py`).
 
-- On **`CMD_TRACKING_START`**, the canvas is cleared.
+- On **`CMD_TRACKING_START`**, the device **does not reset** the canvas; it only “pen-ups” so a new stroke starts cleanly.
 - On each **`CMD_MOVE`**, \((x, y)\) in `0…32767` is scaled to pixel coordinates on the canvas; **`cv2.line`** connects consecutive points so the path matches the pen motion.
 - On **`CMD_TRACKING_STOP`**, the last point is cleared so the next stroke does not connect across a gap.
 

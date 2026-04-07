@@ -116,7 +116,7 @@ def detect_pen_tip(
 
     best_contour = cv2.convexHull(merged_pts.astype(np.int32))
 
-    # If the selected blob is roughly round (typical blue tip marker),
+    # If the selected blob is roughly round (typical green tip marker),
     # use centroid directly; endpoint logic is better for elongated pen-body blobs.
     marker_rect = cv2.minAreaRect(best_contour)
     mw, mh = marker_rect[1]

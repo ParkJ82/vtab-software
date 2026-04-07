@@ -36,7 +36,7 @@ class DriverClient:
         self._send_packet(CMD_MOVE, x, y)
 
     def send_tracking_start(self) -> None:
-        """Notify device: new drawing session; clear canvas and lift pen until next move."""
+        """Notify device: resume drawing; lift pen until next move (does not clear canvas)."""
         self._send_packet(CMD_TRACKING_START, 0, 0)
 
     def send_tracking_stop(self) -> None:

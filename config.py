@@ -5,10 +5,10 @@ CAMERA_INDEX = 1
 FRAME_WIDTH = 1280
 FRAME_HEIGHT = 720
 
-# Blue tip on a brown surface (desk/paper), white pen body.
-# Tune LOWER_HSV / UPPER_HSV for your lighting; blue in OpenCV H is ~90–125 (0–179 scale).
-LOWER_HSV = (95, 90, 70)
-UPPER_HSV = (125, 255, 255)
+# Green tip on a brown surface (desk/paper), black pen body.
+# Tune LOWER_HSV / UPPER_HSV for your lighting; green in OpenCV H is ~35–95 (0–179 scale).
+LOWER_HSV = (35, 70, 70)
+UPPER_HSV = (95, 255, 255)
 
 # Minimum contour area to count as a valid pen tip blob.
 MIN_CONTOUR_AREA = 80
@@ -28,7 +28,8 @@ SMOOTHING_ALPHA = 0.35
 # Region of interest in the frame that corresponds to your drawing area.
 # Set these once you know your camera framing.
 # Format: x1, y1, x2, y2
-ROI = (100, 80, 1180, 680)
+# Shrunk ROI to make border margins bigger (ignore more of the edges).
+ROI = (140, 110, 1140, 650)
 
 # Map ROI coordinates to driver absolute coordinates
 ABSOLUTE_MIN = 0
@@ -45,9 +46,9 @@ SHOW_DEBUG = True
 # Device canvas (test_server maps 0..32767 pen coords to this size)
 DEVICE_CANVAS_WIDTH = 640
 DEVICE_CANVAS_HEIGHT = 480
-# BGR colors for device window: brown “paper”, white “ink” (matches white pen on brown background)
+# BGR colors for device window: brown “paper”, black “ink” (matches black pen on brown background)
 DEVICE_CANVAS_BG_BGR = (45, 72, 105)
-DEVICE_STROKE_BGR = (255, 255, 255)
+DEVICE_STROKE_BGR = (0, 0, 0)
 
 # Gyroscope — started/stopped together with pen tracking (Space). Same button.
 # "none" = no gyro sampling (readings not shown).

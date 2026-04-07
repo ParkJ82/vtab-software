@@ -59,8 +59,8 @@ def main() -> None:
             cmd, x, y = struct.unpack("!BHH", data)
 
             if cmd == CMD_TRACKING_START:
-                canvas = np.zeros((ch, cw, 3), dtype=np.uint8)
-                canvas[:] = config.DEVICE_CANVAS_BG_BGR
+                # Do NOT clear the canvas on restart; only lift the pen so
+                # the next stroke doesn't connect across a tracking pause.
                 last_pt = None
             elif cmd == CMD_TRACKING_STOP:
                 last_pt = None
