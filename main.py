@@ -338,19 +338,45 @@ def setup_camera() -> cv2.VideoCapture:
 
 
 def main() -> None:
-    cap = setup_camera()
+    cap: Optional[cv2.VideoCapture] = None
+    if config.CAMERA_ENABLED:
+        try:
+            cap = setup_camera()
+        except RuntimeError as e:
+            print(f"[camera] {e}")
+            print("[camera] Continuing in IMU-only mode.")
+            cap = None
 
-    driver = DriverClient(config.DRIVER_HOST, config.DRIVER_PORT)
-    driver.connect()
+    driver: Optional[DriverClient] = None
+    if config.DRIVER_ENABLED and cap is not None:
+        driver = DriverClient(config.DRIVER_HOST, config.DRIVER_PORT)
+        driver.connect()
 
     gyro = GyroReader()
-    tracking_active = False
+    tracking_active = False if cap is not None else True
     smoothed_point: Optional[Point] = None
     previous_raw_tip: Optional[Point] = None
     previous_previous_raw_tip: Optional[Point] = None
     last_terminal_print_t = 0.0
 
     try:
+        if cap is None:
+            # IMU-only mode: start immediately and print until Ctrl+C.
+            gyro.start()
+            print("[imu] IMU-only mode (camera disabled/unavailable). Press Ctrl+C to stop.")
+            while True:
+                imu_sample = gyro.read_imu()
+                now = time.perf_counter()
+                if now - last_terminal_print_t >= 0.1:
+                    last_terminal_print_t = now
+                    if imu_sample is None:
+                        imu_s = "imu=NA"
+                    else:
+                        ax, ay, az, gx, gy, gz = imu_sample
+                        imu_s = f"imu=ax,ay,az,gx,gy,gz=({ax},{ay},{az},{gx},{gy},{gz})"
+                    print(f"abs=NA tip=NA {imu_s}", flush=True)
+                time.sleep(0.01)
+
         while True:
             ok, frame = cap.read()
             if not ok:
@@ -416,13 +442,15 @@ def main() -> None:
             if key == ord(" "):
                 tracking_active = not tracking_active
                 if tracking_active:
-                    driver.send_tracking_start()
+                    if driver is not None:
+                        driver.send_tracking_start()
                     smoothed_point = None
                     previous_raw_tip = None
                     previous_previous_raw_tip = None
                     gyro.start()
                 else:
-                    driver.send_tracking_stop()
+                    if driver is not None:
+                        driver.send_tracking_stop()
                     smoothed_point = None
                     previous_raw_tip = None
                     previous_previous_raw_tip = None
@@ -431,14 +459,16 @@ def main() -> None:
                 break
 
     finally:
-        if tracking_active:
+        if driver is not None and tracking_active:
             try:
                 driver.send_tracking_stop()
             except OSError:
                 pass
-        cap.release()
+        if cap is not None:
+            cap.release()
         gyro.stop()
-        driver.close()
+        if driver is not None:
+            driver.close()
         cv2.destroyAllWindows()
 
 

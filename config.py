@@ -5,6 +5,9 @@ CAMERA_INDEX = 1
 FRAME_WIDTH = 1280
 FRAME_HEIGHT = 720
 
+# If False, run in IMU-only mode (no camera, no OpenCV windows).
+CAMERA_ENABLED = True
+
 # Green tip on a brown surface (desk/paper), black pen body.
 # Tune LOWER_HSV / UPPER_HSV for your lighting; green in OpenCV H is ~35–95 (0–179 scale).
 LOWER_HSV = (35, 70, 70)
@@ -38,6 +41,9 @@ ABSOLUTE_MAX = 32767
 # Driver connection
 DRIVER_HOST = "127.0.0.1"
 DRIVER_PORT = 9999
+
+# If False, do not connect/send pen coordinates to the driver.
+DRIVER_ENABLED = True
 
 # Debug windows (when tracking is off, pen overlays are hidden but camera preview can stay)
 SHOW_MASK = True
