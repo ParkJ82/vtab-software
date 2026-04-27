@@ -9,6 +9,8 @@ from typing import Optional
 CMD_MOVE = 0
 CMD_TRACKING_STOP = 1
 CMD_TRACKING_START = 2
+CMD_CLEAR = 3
+CMD_POINTER_HIDE = 4
 
 
 class DriverClient:
@@ -42,6 +44,14 @@ class DriverClient:
     def send_tracking_stop(self) -> None:
         """Notify device: stop drawing; lift pen (no line to next position)."""
         self._send_packet(CMD_TRACKING_STOP, 0, 0)
+
+    def send_clear(self) -> None:
+        """Clear the device canvas immediately."""
+        self._send_packet(CMD_CLEAR, 0, 0)
+
+    def send_pointer_hide(self) -> None:
+        """Hide live pointer overlay on the device canvas."""
+        self._send_packet(CMD_POINTER_HIDE, 0, 0)
 
     def close(self) -> None:
         if self.sock is not None:
