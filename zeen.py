@@ -1,15 +1,15 @@
-# main.py
-
-import math
-import time
-from typing import Optional, Tuple
-
 import cv2
 import numpy as np
+import subprocess
+import sys
+import time
+from typing import Optional, Tuple
+import math
 
 import config
-from driver_client import DriverClient
 from gyro_reader import GyroReader
+
+EXECUTABLE_PATH = r"C:\Users\chrsf\OneDrive\Desktop\sldptest\testvhid.exe"
 
 
 Point = Tuple[int, int]
@@ -25,20 +25,6 @@ def map_range(value: float, in_min: float, in_max: float, out_min: int, out_max:
     ratio = (value - in_min) / (in_max - in_min)
     mapped = out_min + ratio * (out_max - out_min)
     return clamp(mapped, out_min, out_max)
-
-
-def apply_ema(previous: Optional[Point], current: Point, alpha: float) -> Point:
-    if previous is None:
-        return current
-
-    px, py = previous
-    cx, cy = current
-
-    smoothed_x = alpha * cx + (1.0 - alpha) * px
-    smoothed_y = alpha * cy + (1.0 - alpha) * py
-
-    return int(smoothed_x), int(smoothed_y)
-
 
 def _tip_from_sharpest_hull_vertex(
     hull: np.ndarray,
@@ -88,6 +74,18 @@ def _tip_from_sharpest_hull_vertex(
 
     return int(round(pts[best_i, 0])), int(round(pts[best_i, 1]))
 
+def apply_ema(previous: Optional[Point], current: Point, alpha: float) -> Point:
+    if previous is None:
+        return current
+
+    px, py = previous
+    cx, cy = current
+
+    smoothed_x = alpha * cx + (1.0 - alpha) * px
+    smoothed_y = alpha * cy + (1.0 - alpha) * py
+
+    return int(smoothed_x), int(smoothed_y)
+
 
 def detect_pen_tip(
     frame: np.ndarray,
@@ -107,6 +105,7 @@ def detect_pen_tip(
 
     lower = np.array(config.LOWER_HSV, dtype=np.uint8)
     upper = np.array(config.UPPER_HSV, dtype=np.uint8)
+
     mask = cv2.inRange(hsv, lower, upper)
     if hasattr(config, "LOWER_HSV_2") and hasattr(config, "UPPER_HSV_2"):
         lower2 = np.array(config.LOWER_HSV_2, dtype=np.uint8)
@@ -300,14 +299,22 @@ def draw_debug(
     if not writing_active:
         cv2.putText(
             output,
-            "Press SPACE to write on device canvas",
+            "Press SPACE to start pen tracking",
             (20, 88),
             cv2.FONT_HERSHEY_SIMPLEX,
             0.6,
             (255, 255, 255),
             2,
         )
-
+        cv2.putText(
+            output,
+            "Pen + gyro not sent; camera overlay hidden",
+            (20, 95),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.55,
+            (200, 200, 200),
+            2,
+        )
     if raw_point is not None:
         cv2.circle(output, raw_point, 7, (0, 0, 255), -1)
         cv2.putText(
@@ -377,10 +384,10 @@ def draw_debug(
 
     cv2.putText(
         output,
-        "Space: toggle device writing | q: quit",
+        "Space: toggle devicewriting | q: quit",
         (20, output.shape[0] - 20),
         cv2.FONT_HERSHEY_SIMPLEX,
-        0.6,
+        0.65,
         (255, 255, 255),
         2,
     )
@@ -402,6 +409,23 @@ def setup_camera() -> cv2.VideoCapture:
 
 
 def main() -> None:
+    proc: Optional[subprocess.Popen] = None
+    if config.DRIVER_ENABLED:
+        print("Starting C HID interface...")
+        try:
+            proc = subprocess.Popen(
+                [EXECUTABLE_PATH],
+                stdin=subprocess.PIPE,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                text=True,
+            )
+        except FileNotFoundError:
+            print(f"Error: Could not find executable at {EXECUTABLE_PATH}")
+            sys.exit(1)
+
+    time.sleep(0.5)
+
     cap: Optional[cv2.VideoCapture] = None
     if config.CAMERA_ENABLED:
         try:
@@ -409,21 +433,13 @@ def main() -> None:
         except RuntimeError as e:
             print(f"[camera] {e}")
             print("[camera] Continuing in IMU-only mode.")
+            if proc is not None and proc.stdin is not None:
+                proc.stdin.close()
+                proc.wait()
             cap = None
 
-    driver: Optional[DriverClient] = None
-    if config.DRIVER_ENABLED and cap is not None:
-        driver = DriverClient(config.DRIVER_HOST, config.DRIVER_PORT)
-        driver.connect()
-
     gyro = GyroReader()
-    # Camera mode:
-    # - first Space: initialize/show device canvas only
-    # - second Space: start drawing
-    # - third Space: stop drawing
-    # - then alternate start/stop on each Space
     writing_active = False
-    device_canvas_initialized = False
     smoothed_point: Optional[Point] = None
     previous_raw_tip: Optional[Point] = None
     previous_previous_raw_tip: Optional[Point] = None
@@ -431,7 +447,6 @@ def main() -> None:
 
     try:
         if cap is None:
-            # IMU-only mode: start immediately and print until Ctrl+C.
             gyro.start()
             print("[imu] IMU-only mode (camera disabled/unavailable). Press Ctrl+C to stop.")
             while True:
@@ -467,8 +482,13 @@ def main() -> None:
                 # Use only raw tip coordinates (no EMA smoothing).
                 smoothed_point = None
                 abs_point = frame_point_to_absolute(raw_point)
-                if writing_active and driver is not None:
-                    driver.send_coordinates(abs_point[0], abs_point[1])
+                if writing_active and proc is not None and proc.stdin is not None:
+                    try:
+                        proc.stdin.write(f"{abs_point[0]} {abs_point[1]}\n")
+                        proc.stdin.flush()
+                    except BrokenPipeError:
+                        print("Error: The C program terminated unexpectedly.")
+                        proc = None
             else:
                 smoothed_point = None
                 previous_raw_tip = None
@@ -481,7 +501,6 @@ def main() -> None:
                 imu_sample = gyro.read_imu()
                 gyro_sample = gyro.read()
 
-            # Terminal output: pen coordinates + IMU (throttled); tip always logged when camera runs.
             now = time.perf_counter()
             if now - last_terminal_print_t >= 0.1:
                 last_terminal_print_t = now
@@ -491,6 +510,7 @@ def main() -> None:
                 else:
                     tip_s = "tip=OK"
                     abs_s = f"abs=({abs_point[0]},{abs_point[1]})"
+
                 if writing_active:
                     if imu_sample is None:
                         imu_s = "imu=NA"
@@ -512,36 +532,21 @@ def main() -> None:
 
             key = cv2.waitKey(1) & 0xFF
             if key == ord(" "):
-                if not device_canvas_initialized:
-                    if driver is not None:
-                        driver.send_tracking_start()
-                    device_canvas_initialized = True
-                    writing_active = False
-                elif not writing_active:
-                    writing_active = True
-                    if driver is not None:
-                        # Lift pen at write-start so first stroke begins cleanly.
-                        driver.send_tracking_start()
+                writing_active = not writing_active
+                if writing_active:
                     gyro.start()
                 else:
-                    writing_active = False
-                    if driver is not None:
-                        driver.send_tracking_stop()
                     gyro.stop()
             elif key == ord("q"):
                 break
 
     finally:
-        if driver is not None and writing_active:
-            try:
-                driver.send_tracking_stop()
-            except OSError:
-                pass
         if cap is not None:
             cap.release()
         gyro.stop()
-        if driver is not None:
-            driver.close()
+        if proc is not None and proc.poll() is None and proc.stdin is not None:
+            proc.stdin.close()
+            proc.wait()
         cv2.destroyAllWindows()
 
 

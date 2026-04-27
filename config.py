@@ -8,22 +8,18 @@ FRAME_HEIGHT = 720
 # If False, run in IMU-only mode (no camera, no OpenCV windows).
 CAMERA_ENABLED = True
 
-# Green tip on a brown surface (desk/paper), black pen body.
-# Tune LOWER_HSV / UPPER_HSV for your lighting; green in OpenCV H is ~35–95 (0–179 scale).
-LOWER_HSV = (35, 70, 70)
-UPPER_HSV = (95, 255, 255)
-
-# Minimum contour area to count as a valid pen tip blob.
-MIN_CONTOUR_AREA = 80
-MAX_CONTOUR_AREA = 3000
-
-# Pen-like contour filtering (to reject hand blobs):
-# elongated objects have larger major/minor axis ratio.
-MIN_PEN_ASPECT_RATIO = 1.0
+# Wide blue (OpenCV HSV, H 0–179): cyan-leaning through violet blues; dull to vivid. Single range — blue does not wrap like red.
+# If black/grey appears in the mask, raise the 2nd (S) and 3rd (V) numbers; if tips vanish in shadow, lower V slightly.
+LOWER_HSV = (70, 10, 40)
+UPPER_HSV = (150, 255, 255)
 
 # If pen is split into multiple close blobs (e.g., hand occlusion),
 # merge nearby contours before endpoint/tip extraction.
 MERGE_CONTOUR_DISTANCE = 120
+
+# If the blue blob’s sharpest convex-hull corner angle (radians) is below this, use that vertex as the tip (not centroid / PCA midpoint).
+# ~1.40 rad ≈ 80°. Corners on squares (~90°) stay above this → fall back to centroid/PCA.
+TIP_APEX_MAX_RAD = 1.40
 
 # Exponential moving average smoothing
 SMOOTHING_ALPHA = 0.35
@@ -53,13 +49,13 @@ SHOW_DEBUG = True
 DEVICE_CANVAS_WIDTH = 640
 DEVICE_CANVAS_HEIGHT = 480
 # BGR colors for device window: brown “paper”, black “ink” (matches black pen on brown background)
-DEVICE_CANVAS_BG_BGR = (45, 72, 105)
+DEVICE_CANVAS_BG_BGR = (255, 255, 255)  # white paper (BGR)
 DEVICE_STROKE_BGR = (0, 0, 0)
 
 # Gyroscope — started/stopped together with pen tracking (Space). Same button.
 # "none" = no gyro sampling (readings not shown).
 # "mock" = synthetic rates for demo without hardware.
 # "serial" = read text lines "gx gy gz" or "gx,gy,gz" from GYRO_SERIAL_PORT (needs pyserial).
-GYRO_MODE = "serial"
+GYRO_MODE = "none"
 GYRO_SERIAL_PORT = None
 GYRO_SERIAL_BAUD = 9600
