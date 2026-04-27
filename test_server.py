@@ -8,7 +8,7 @@ import cv2
 import numpy as np
 
 import config
-from driver_client import CMD_MOVE, CMD_TRACKING_START, CMD_TRACKING_STOP
+from driver_client import CMD_CLEAR, CMD_MOVE, CMD_POINTER_HIDE, CMD_TRACKING_START, CMD_TRACKING_STOP
 
 
 def recv_exact(conn: socket.socket, n: int) -> Optional[bytes]:
@@ -38,16 +38,18 @@ def main() -> None:
     server.bind((host, port))
     server.listen(1)
 
-    print(f"Device display listening on {host}:{port} (5-byte packets: move / start / stop)")
-    print("OpenCV window shows the drawing. Press q in that window to exit.")
-
-    conn, addr = server.accept()
-    print(f"Connected by {addr}")
+    print(f"Device display listening on {host}:{port} (5-byte packets: move / start / stop / clear)")
+    print("OpenCV window shows the drawing. Press c to clear, q to exit.")
 
     canvas = np.zeros((ch, cw, 3), dtype=np.uint8)
     canvas[:] = config.DEVICE_CANVAS_BG_BGR
     last_pt: Optional[Tuple[int, int]] = None
+    cursor_marker: Optional[Tuple[int, int]] = None
+    tracking_active = False
     line_color = config.DEVICE_STROKE_BGR
+
+    conn, addr = server.accept()
+    print(f"Connected by {addr}")
 
     try:
         while True:
@@ -59,21 +61,40 @@ def main() -> None:
             cmd, x, y = struct.unpack("!BHH", data)
 
             if cmd == CMD_TRACKING_START:
-                # Do NOT clear the canvas on restart; only lift the pen so
-                # the next stroke doesn't connect across a tracking pause.
+                # Resume drawing; do not clear existing strokes.
+                tracking_active = True
                 last_pt = None
             elif cmd == CMD_TRACKING_STOP:
+                tracking_active = False
                 last_pt = None
+            elif cmd == CMD_CLEAR:
+                canvas[:] = config.DEVICE_CANVAS_BG_BGR
+                last_pt = None
+            elif cmd == CMD_POINTER_HIDE:
+                cursor_marker = None
             elif cmd == CMD_MOVE:
                 x = min(32767, max(0, int(x)))
                 y = min(32767, max(0, int(y)))
                 pt = abs_to_canvas(x, y, cw, ch)
-                if last_pt is not None:
-                    cv2.line(canvas, last_pt, pt, line_color, 2, lineType=cv2.LINE_AA)
-                last_pt = pt
+                cursor_marker = pt
+                if tracking_active:
+                    if last_pt is not None:
+                        cv2.line(canvas, last_pt, pt, line_color, 2, lineType=cv2.LINE_AA)
+                    last_pt = pt
 
-            cv2.imshow("Pen drawing (device)", canvas)
-            if (cv2.waitKey(1) & 0xFF) == ord("q"):
+            # Draw a temporary pointer overlay so users always know location.
+            display = canvas.copy()
+            if cursor_marker is not None:
+                px, py = cursor_marker
+                cv2.circle(display, (px, py), 5, (0, 0, 255), -1)
+                cv2.line(display, (px - 10, py), (px + 10, py), (0, 0, 255), 1, lineType=cv2.LINE_AA)
+                cv2.line(display, (px, py - 10), (px, py + 10), (0, 0, 255), 1, lineType=cv2.LINE_AA)
+            cv2.imshow("Pen drawing (device)", display)
+            key = cv2.waitKey(1) & 0xFF
+            if key == ord("c"):
+                canvas[:] = config.DEVICE_CANVAS_BG_BGR
+                last_pt = None
+            elif key == ord("q"):
                 break
     finally:
         conn.close()

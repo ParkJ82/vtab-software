@@ -377,7 +377,7 @@ def draw_debug(
 
     cv2.putText(
         output,
-        "Space: toggle device writing | q: quit",
+        "Space: toggle device writing | c: clear canvas | q: quit",
         (20, output.shape[0] - 20),
         cv2.FONT_HERSHEY_SIMPLEX,
         0.6,
@@ -467,7 +467,8 @@ def main() -> None:
                 # Use only raw tip coordinates (no EMA smoothing).
                 smoothed_point = None
                 abs_point = frame_point_to_absolute(raw_point)
-                if writing_active and driver is not None:
+                # Keep pointer position live on device canvas after initialization.
+                if device_canvas_initialized and driver is not None:
                     driver.send_coordinates(abs_point[0], abs_point[1])
             else:
                 smoothed_point = None
@@ -514,7 +515,9 @@ def main() -> None:
             if key == ord(" "):
                 if not device_canvas_initialized:
                     if driver is not None:
+                        # Open canvas, then stay in non-drawing mode (hover can show pointer).
                         driver.send_tracking_start()
+                        driver.send_tracking_stop()
                     device_canvas_initialized = True
                     writing_active = False
                 elif not writing_active:
@@ -528,6 +531,9 @@ def main() -> None:
                     if driver is not None:
                         driver.send_tracking_stop()
                     gyro.stop()
+            elif key == ord("c"):
+                if driver is not None:
+                    driver.send_clear()
             elif key == ord("q"):
                 break
 
